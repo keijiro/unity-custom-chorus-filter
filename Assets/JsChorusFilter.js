@@ -37,7 +37,7 @@ private function UpdateParameters() {
 	var sampleRate = AudioSettings.outputSampleRate;
 	baseDelay = sampleRate * delayMs / 1000;
 	depth = sampleRate * depthMs / 2000;
-	deltaPhi = Mathf.PI * 2 * frequencyHz / sampleRate;
+	deltaPhi = frequencyHz / sampleRate;
 }
 
 function Awake() {
@@ -61,14 +61,14 @@ function OnAudioFilterRead(data:float[], channels:int) {
 		return;
 	}
 	
-	var halfpi = Mathf.PI * 0.5;
+	var pi2 = Mathf.PI * 2;
 	var amp1 = (1.0 + stereo) * 0.5;
 	var amp2 = (1.0 - stereo) * 0.5;
 	var bufferSizeBits = bufferSize - 1;
 	
 	for (var i = 0; i < data.Length; i += 2) {
-		var m1 = Mathf.Sin(phi);
-		var m2 = Mathf.Sin(phi + halfpi);
+		var m1 = Mathf.Sin(pi2 * phi);
+		var m2 = Mathf.Sin(pi2 * (phi + 0.25));
 
 		var d1 = baseDelay + (1.0 + m1) * depth;
 		var d2 = baseDelay + (1.0 + m2) * depth;
@@ -114,5 +114,6 @@ function OnAudioFilterRead(data:float[], channels:int) {
 
 		phi += deltaPhi;
 	}
-	while (phi > Mathf.PI * 2) phi -= Mathf.PI * 2;
+	
+	phi -= Mathf.Floor(phi);
 }

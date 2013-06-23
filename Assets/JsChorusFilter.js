@@ -1,9 +1,22 @@
 ﻿#pragma strict
 
-var delayMs = 100.0;
-var frequencyHz = 2.0;
-var depthMs = 50.0;
-var amplifier = 0.77;
+@Range(0.0, 200.0)
+var delayMs = 20.0;
+
+@Range(0.0, 20.0)
+var frequencyHz = 0.4;
+
+@Range(0.0, 200.0)
+var depthMs = 12.0;
+
+@Range(0.0, 1.0)
+var amplifier = 0.666666666;
+
+@Range(0.0, 1.0)
+var feedback = 0.3;
+
+@Range(0.0, 1.0)
+var stereo = 0.5;
 
 private var bufferSize = 64 * 1024;
 
@@ -23,7 +36,10 @@ private var error = "";
 function Awake() {
 	buffer1 = new float[bufferSize];
 	buffer2 = new float[bufferSize];
-	
+	UpdateParameters();
+}
+
+function UpdateParameters() {	
 	var sampleRate = AudioSettings.outputSampleRate;
 	delay = sampleRate * delayMs / 1000;
 	depth = sampleRate * depthMs / 2000;
@@ -34,6 +50,8 @@ function Update() {
 	if (error) {
 		Debug.LogError(error);
 		Destroy(this);
+	} else {
+		UpdateParameters();
 	}
 }
 
@@ -61,8 +79,14 @@ function OnAudioFilterRead(data:float[], channels:int) {
 		var s2a = buffer2[(position + bufferSize - offset2i    ) & (bufferSize - 1)];
 		var s2b = buffer2[(position + bufferSize - offset2i - 1) & (bufferSize - 1)];
 		
-		data[i    ] = (data[i    ] + s1a * (1.0 - offset1f) + s1b * offset1f) * amplifier;
-		data[i + 1] = (data[i + 1] + s2a * (1.0 - offset2f) + s2b * offset2f) * amplifier;
+		var add1 = s1a * (1.0 - offset1f) + s1b * offset1f;
+		var add2 = s2a * (1.0 - offset2f) + s2b * offset2f;
+		
+		data[i    ] = (data[i    ] + add1 * (0.5 + stereo * 0.5) + add2 * (1.0 - stereo) * 0.5) * amplifier;
+		data[i + 1] = (data[i + 1] + add2 * (0.5 + stereo * 0.5) + add1 * (1.0 - stereo) * 0.5) * amplifier;
+
+		buffer1[position] += data[i]     * feedback;
+		buffer2[position] += data[i + 1] * feedback;
 
 		position = (position + 1) & (bufferSize - 1);
 

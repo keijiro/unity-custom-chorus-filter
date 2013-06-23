@@ -1,31 +1,31 @@
 ﻿#pragma strict
 
-@Range(0.0, 200.0)
+@Range(0.0, 100.0)
 var delayMs = 20.0;
 
-@Range(0.0, 20.0)
-var frequencyHz = 0.4;
+@Range(0.0, 5.0)
+var frequencyHz = 0.2;
 
-@Range(0.0, 200.0)
-var depthMs = 12.0;
-
-@Range(0.0, 1.0)
-var amplifier = 0.666666666;
+@Range(0.0, 100.0)
+var depthMs = 10.0;
 
 @Range(0.0, 1.0)
-var feedback = 0.3;
+var amplifier = 0.666666;
+
+@Range(0.0, 0.5)
+var feedback = 0.1;
 
 @Range(0.0, 1.0)
 var stereo = 0.5;
 
-private var bufferSize = 64 * 1024;
+private var bufferSize = 32 * 1024;
 
 private var buffer1 : float[];
 private var buffer2 : float[];
 
 private var position = 0;
 
-private var delay = 100.0;
+private var baseDelay = 100.0;
 private var depth = 100.0;
 
 private var phi = 0.0;
@@ -33,17 +33,17 @@ private var deltaPhi = 2.0 / 44800;
 
 private var error = "";
 
+private function UpdateParameters() {	
+	var sampleRate = AudioSettings.outputSampleRate;
+	baseDelay = sampleRate * delayMs / 1000;
+	depth = sampleRate * depthMs / 2000;
+	deltaPhi = Mathf.PI * 2 * frequencyHz / sampleRate;
+}
+
 function Awake() {
 	buffer1 = new float[bufferSize];
 	buffer2 = new float[bufferSize];
 	UpdateParameters();
-}
-
-function UpdateParameters() {	
-	var sampleRate = AudioSettings.outputSampleRate;
-	delay = sampleRate * delayMs / 1000;
-	depth = sampleRate * depthMs / 2000;
-	deltaPhi = Mathf.PI * 2 * frequencyHz / sampleRate;
 }
 
 function Update() {
@@ -61,34 +61,56 @@ function OnAudioFilterRead(data:float[], channels:int) {
 		return;
 	}
 	
+	var halfpi = Mathf.PI * 0.5;
+	var amp1 = (1.0 + stereo) * 0.5;
+	var amp2 = (1.0 - stereo) * 0.5;
+	var bufferSizeBits = bufferSize - 1;
+	
 	for (var i = 0; i < data.Length; i += 2) {
-		buffer1[position] = data[i];
-		buffer2[position] = data[i + 1];
+		var m1 = Mathf.Sin(phi);
+		var m2 = Mathf.Sin(phi + halfpi);
 
-		var move = Mathf.Sin(phi);
-
-		var offset1 = delay + (1.0 + move) * depth;
-		var offset2 = delay + (1.0 - move) * depth;
-		var offset1i : int = offset1;
-		var offset2i : int = offset2;
-		var offset1f = offset1 - offset1i;
-		var offset2f = offset2 - offset2i;
+		var d1 = baseDelay + (1.0 + m1) * depth;
+		var d2 = baseDelay + (1.0 + m2) * depth;
+		var d3 = baseDelay + (1.0 - m1) * depth;
 		
-		var s1a = buffer1[(position + bufferSize - offset1i    ) & (bufferSize - 1)];
-		var s1b = buffer1[(position + bufferSize - offset1i - 1) & (bufferSize - 1)];
-		var s2a = buffer2[(position + bufferSize - offset2i    ) & (bufferSize - 1)];
-		var s2b = buffer2[(position + bufferSize - offset2i - 1) & (bufferSize - 1)];
-		
-		var add1 = s1a * (1.0 - offset1f) + s1b * offset1f;
-		var add2 = s2a * (1.0 - offset2f) + s2b * offset2f;
-		
-		data[i    ] = (data[i    ] + add1 * (0.5 + stereo * 0.5) + add2 * (1.0 - stereo) * 0.5) * amplifier;
-		data[i + 1] = (data[i + 1] + add2 * (0.5 + stereo * 0.5) + add1 * (1.0 - stereo) * 0.5) * amplifier;
+		var d1i : int = d1;
+		var d2i : int = d2;
+		var d3i : int = d3;
 
-		buffer1[position] += data[i]     * feedback;
-		buffer2[position] += data[i + 1] * feedback;
+		var d1f = d1 - d1i;
+		var d2f = d2 - d2i;
+		var d3f = d3 - d3i;
+		
+		var offsetPosition = position + bufferSize;
 
-		position = (position + 1) & (bufferSize - 1);
+		var c1a = buffer1[(offsetPosition - d1i    ) & bufferSizeBits];
+		var c1b = buffer1[(offsetPosition - d1i - 1) & bufferSizeBits];
+		
+		var c2a_idx = (offsetPosition - d2i    ) & bufferSizeBits;
+		var c2b_idx = (offsetPosition - d2i - 1) & bufferSizeBits;
+		var c2a = (buffer1[c2a_idx] + buffer2[c2a_idx]) * 0.5;
+		var c2b = (buffer1[c2b_idx] + buffer2[c2b_idx]) * 0.5;
+
+		var c3a = buffer2[(offsetPosition - d3i    ) & bufferSizeBits];
+		var c3b = buffer2[(offsetPosition - d3i - 1) & bufferSizeBits];
+		
+		var c1 = c1a * (1 - d1f) + c1b * d1f;
+		var c2 = c2a * (1 - d2f) + c2b * d2f;
+		var c3 = c3a * (1 - d3f) + c3b * d3f;
+		
+		var o1 = c1 * amp1 + c2 + c3 * amp2;
+		var o2 = c1 * amp2 + c2 + c3 * amp1;
+
+		var i1 = data[i    ] * amplifier;
+		var i2 = data[i + 1] * amplifier;
+
+		data[i    ] = i1 + o1;
+		data[i + 1] = i2 + o2;
+		
+		buffer1[position] = i1 + o1 * feedback;
+		buffer2[position] = i2 + o2 * feedback;
+		position = (position + 1) & bufferSizeBits;
 
 		phi += deltaPhi;
 	}

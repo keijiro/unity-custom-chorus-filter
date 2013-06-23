@@ -249,11 +249,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 604e568b9ca7445b19156adca4810d2b, type: 3}
   m_Name: 
   delayMs: 20
-  frequencyHz: .400000006
-  depthMs: 13
-  amplifier: .666666687
-  feedback: .300000012
-  stereo: .300000012
+  frequencyHz: .200000003
+  depthMs: 10
+  amplifier: .666665971
+  feedback: .100000001
+  stereo: .5
 --- !u!166 &1786392647
 AudioChorusFilter:
   m_ObjectHideFlags: 0
